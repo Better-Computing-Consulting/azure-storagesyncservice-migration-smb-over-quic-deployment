@@ -1,0 +1,369 @@
+- hosts: asahosts
+  connection: local
+  gather_facts: no
+  vars:
+      rg: bccDevFileShareRG
+      vnet: VPNetWest
+      vnetiprange: 172.21.0.0/16
+      subnet1name: VPNSubnet1
+      subnet1iprange: 172.21.3.0/24
+      gwsubnetiprange: 172.21.9.0/27
+      pubip: VNetGW1PubIP
+      vnetgw: VNetGW1
+      localnetgw: ASALAB
+      localnetgwaddrprefix: 192.168.0.0/24
+      localnetgwaddrnet: 192.168.0.0
+      localnetgwpeeraddr: 192.168.1.2
+      localnetgwpeeraddrnet: "192.168.1.0 mask 255.255.255.252"
+      vpnconn: AzureLabConn
+      vpnrouteip: 192.168.1.3
+      vmname: W202202
+      vmadmin: bccadmin
+      landns: 192.168.0.30
+      keyvaulturl: "https://bccdevkeyvault1.vault.azure.net/"
+      storageaccountname: bccdevfilesharesyncsa
+      dnsresourcegroup: PublicDNSrg
+      dnszone: bcc.bz
+
+  tasks:    
+
+    - name: Get project secret variables from KeyVault
+      azure.azcollection.azure_rm_keyvaultsecret_info:
+        vault_uri: "{{ keyvaulturl }}"
+        name: "{{ item }}"
+      loop:
+        - "ASAUserName"
+        - "ASAUserPassword"
+        - "EnablePassword"
+        - "VPNSharedKey"
+        - "vmadminpw"
+      register: secrets
+
+    - name: Set asa cli and vpn shared key variables
+      set_fact: 
+        cli:
+          host: "{{ inventory_hostname }}"
+          authorize: yes
+          username: "{{ secrets.results[0]['secrets'][0]['secret'] }}"
+          password: "{{ secrets.results[1]['secrets'][0]['secret'] }}"
+          auth_pass: "{{ secrets.results[2]['secrets'][0]['secret'] }}"
+        vpnsharedkey: "{{ secrets.results[3]['secrets'][0]['secret'] }}"
+        vmadminpw: "{{ secrets.results[4]['secrets'][0]['secret'] }}"
+
+    - name: Create resource group
+      azure_rm_resourcegroup:
+        name: "{{ rg }}"
+        location: westus
+
+    - name: Create virtual network
+      azure_rm_virtualnetwork:
+        resource_group: "{{ rg }}"
+        name: "{{ vnet }}"
+        address_prefixes: "{{ vnetiprange }}"
+
+    - name: Add subnet
+      azure_rm_subnet:
+        resource_group: "{{ rg }}"
+        name: "{{ subnet1name }}"
+        address_prefix: "{{ subnet1iprange }}"
+        virtual_network: "{{ vnet }}"
+        service_endpoints:
+          - service: "Microsoft.Storage"
+            locations:
+              - "westus"
+      register: subnetinfo
+
+    - name: Add GatewaySubnet
+      azure_rm_subnet:
+        resource_group: "{{ rg }}"
+        name: "GatewaySubnet"
+        address_prefix: "{{ gwsubnetiprange }}"
+        virtual_network: "{{ vnet }}"
+    
+    - name: Get on-prem public ip
+      ansible.builtin.shell: "dig +short myip.opendns.com @resolver1.opendns.com"
+      register: shres
+
+    - name: Set on-prem public ip variable
+      set_fact:
+        asapubip: "{{ shres.stdout }}" 
+
+    - name: Deploy storage account and configure firewall and virtual networks
+      azure_rm_storageaccount:
+        resource_group: "{{ rg }}"
+        name: "{{ storageaccountname }}"
+        type: Standard_LRS
+        kind: StorageV2
+        minimum_tls_version: TLS1_2
+        network_acls:
+          bypass: AzureServices
+          default_action: Deny
+          virtual_network_rules:
+            - id: "{{ subnetinfo['state']['id'] }}"
+              action: Allow
+          ip_rules:
+            - value: "{{ asapubip }}"
+              action: Allow
+
+    - name: "Create public IP address"
+      azure_rm_publicipaddress:
+        resource_group: "{{ rg }}"
+        allocation_method: Static
+        name: "{{ vmname }}PubIP"
+      register: vmpubip
+
+    - name: "Add an A DNS record for {{ vmpubip['state']['ip_address'] }} and the chosen VM name and public domain {{ vmname }}.{{ dnszone }}"
+      azure_rm_dnsrecordset:
+        resource_group: "{{ dnsresourcegroup }}"
+        relative_name: "{{ vmname }}"
+        zone_name: "{{ dnszone }}"
+        record_type: A
+        records:
+          - entry: "{{ vmpubip['state']['ip_address'] }}"
+
+    - name: "Create Network Security Group that allows port UDP 443"
+      azure_rm_securitygroup:
+        resource_group: "{{ rg }}"
+        name: "{{ vmname }}NSG"
+        rules:
+          - name: "UDP_443"
+            protocol: Udp
+            destination_port_range: 443
+            access: Allow
+            priority: 1001
+            direction: Inbound
+
+    - name: "Create vNIC with public IP"
+      azure_rm_networkinterface:
+        resource_group: "{{ rg }}"
+        name: "{{ vmname }}NIC"
+        virtual_network: "{{ vnet }}"
+        subnet: "{{ subnet1name }}"
+        security_group: "{{ vmname }}NSG"
+        dns_servers:
+          - "{{ landns }}"
+          - 8.8.8.8
+        ip_configurations:
+          - name: ipconfig1
+            public_ip_address_name: "{{ vmname }}PubIP"
+            primary: True
+      register: vmpnic
+
+    - name: "Display NIC info"
+      ansible.builtin.debug:
+        msg: "{{ vmpnic['state']['ip_configuration']['private_ip_address'] }}"
+
+    - name: "Create VM"
+      azure_rm_virtualmachine:
+        resource_group: "{{ rg }}"
+        name: "{{ vmname }}"
+        vm_size: Standard_B2s
+        admin_username: "{{ vmadmin }}"
+        admin_password: "{{ vmadminpw }}"
+        network_interfaces:  "{{ vmname }}NIC"
+        os_type: Windows
+        managed_disk_type: Standard_LRS
+        data_disks:
+          - lun: 0
+            disk_size_gb: 64
+            managed_disk_type: Standard_LRS
+        image:
+          offer: WindowsServer
+          publisher: MicrosoftWindowsServer
+          sku: '2022-datacenter-azure-edition-core-smalldisk'
+          version: latest
+
+    - name: Create VNetGW public IP address
+      azure_rm_publicipaddress:
+        resource_group: "{{ rg }}"
+        allocation_method: Dynamic
+        name: "{{ pubip }}"
+
+    - name: Create virtual network gateway with bgp
+      azure_rm_virtualnetworkgateway:
+        resource_group: "{{ rg }}"
+        name: "{{ vnetgw }}"
+        sku: "VpnGw1"
+        ip_configurations:
+        - name: "vnetgwipconfig"
+          private_ip_allocation_method: Dynamic
+          public_ip_address_name: "{{ pubip }}"
+        enable_bgp: yes
+        virtual_network: "{{ vnet }}"
+        bgp_settings:
+          asn: 65515
+
+    - name: Get virtual network gateway info via API request
+      azure_rm_resource_info:
+        resource_group: "{{ rg }}"
+        provider: network
+        resource_type: virtualNetworkGateways
+        resource_name: "{{ vnetgw }}"
+        api_version: "2020-11-01"
+      register: vnetgwvar
+
+    - name: Set bgpPeeringAddress and tunnelIpAddresses public ip variables
+      set_fact: 
+        azvpnpeeraddress: "{{ vnetgwvar['response'][0]['properties']['bgpSettings']['bgpPeeringAddress'] }}" 
+        azvpnpubip: "{{ vnetgwvar['response'][0]['properties']['bgpSettings']['bgpPeeringAddresses'][0]['tunnelIpAddresses'][0] }}" 
+
+    - name: Display Azure private peer ip for ping testing
+      ansible.builtin.debug:
+        msg: "ping -t {{ azvpnpeeraddress }}"
+
+    - name: Create Local Network Gateway and VPN-Connection from template
+      azure_rm_deployment:
+        resource_group: "{{ rg }}"
+        name: LocalNetGWVPNConnDeployment
+        parameters:
+          LocalNetGWName:
+            value: "{{ localnetgw }}"
+          gatewayIpAddress:
+            value: "{{ asapubip }}"
+          addressPrefixes:
+            value: "{{ localnetgwaddrprefix }}"
+          asn:
+            value: 65000
+          bgpPeeringAddress:
+            value: "{{ localnetgwpeeraddr }}"
+          VPNConnName:
+            value: "{{ vpnconn }}"
+          VNetGW:
+            value: "{{ vnetgw }}"
+          vpnSharedKey:
+            value: "{{ vpnsharedkey }}"
+        template_link: 'https://raw.githubusercontent.com/Better-Computing-Consulting/azure-devops-ci-ansible-vpn-deployment/master/LocalNetGW-VPNConn.json'
+
+    - name: crypto ikev2 policy 10
+      cisco.asa.asa_config:
+        lines:
+        - encryption aes-gcm-256 aes-gcm-192 aes-gcm
+        - integrity null
+        - group 14 5 2
+        - prf sha512 sha384 sha256 sha
+        - lifetime seconds 86400
+        match: line
+        parents: [crypto ikev2 policy 10]
+        provider: "{{ cli }}"
+
+    - name: crypto ikev2 policy 20
+      cisco.asa.asa_config:
+        lines:
+        - encryption aes-256 aes-192 aes
+        - integrity sha512 sha384 sha256 sha
+        - group 14 5 2
+        - prf sha512 sha384 sha256 sha
+        - lifetime seconds 86400
+        match: line
+        parents: [crypto ikev2 policy 20]
+        provider: "{{ cli }}"
+
+    - name: crypto ikev2 enable outside
+      cisco.asa.asa_config:
+        lines:
+        - crypto ikev2 enable outside
+        match: line
+        provider: "{{ cli }}"
+
+    - name: crypto ipsec ikev2 ipsec-proposal AZURE-PROPOSAL
+      cisco.asa.asa_config:
+        lines:
+        - protocol esp encryption aes-256
+        - protocol esp integrity sha-256
+        match: line
+        parents: [crypto ipsec ikev2 ipsec-proposal AZURE-PROPOSAL]
+        provider: "{{ cli }}"
+
+    - name: crypto ipsec profile AZURE-PROPOSAL
+      cisco.asa.asa_config:
+        lines:
+        - set ikev2 ipsec-proposal AZURE-PROPOSAL
+        match: line
+        parents: [crypto ipsec profile AZURE-PROPOSAL]
+        provider: "{{ cli }}"
+
+    - name: group-policy AZURE internal
+      cisco.asa.asa_config:
+        lines:
+        - group-policy AZURE internal
+        match: line
+        provider: "{{ cli }}"
+
+    - name: group-policy AZURE attributes
+      cisco.asa.asa_config:
+        lines:
+        - vpn-tunnel-protocol ikev2
+        match: line
+        parents: [group-policy AZURE attributes]
+        provider: "{{ cli }}"
+
+    - name: "tunnel-group {{ azvpnpubip }} type ipsec-l2l"
+      cisco.asa.asa_config:
+        lines:
+        - "tunnel-group {{ azvpnpubip }} type ipsec-l2l"
+        match: line
+        provider: "{{ cli }}"
+
+    - name: "tunnel-group {{ azvpnpubip }} general-attributes"
+      cisco.asa.asa_config:
+        lines:
+        - default-group-policy AZURE
+        match: line
+        parents: ["tunnel-group {{ azvpnpubip }} general-attributes"]
+        provider: "{{ cli }}"
+
+    - name: "tunnel-group {{ azvpnpubip }} ipsec-attributes"
+      cisco.asa.asa_config:
+        lines:
+        - "ikev2 remote-authentication pre-shared-key {{ vpnsharedkey }}"
+        - "ikev2 local-authentication pre-shared-key {{ vpnsharedkey }}"
+        match: line
+        parents: ["tunnel-group {{ azvpnpubip }} ipsec-attributes"]
+        provider: "{{ cli }}"
+
+    - name: interface Tunnel1
+      cisco.asa.asa_config:
+        lines:
+        - nameif AZURE
+        - "ip address {{ localnetgwpeeraddr }} 255.255.255.252"
+        - tunnel source interface outside
+        - "tunnel destination {{ azvpnpubip }}"
+        - tunnel mode ipsec ipv4
+        - tunnel protection ipsec profile AZURE-PROPOSAL
+        - no shutdown
+        match: line
+        parents: [interface Tunnel1]
+        provider: "{{ cli }}"
+
+    - name: "route AZURE {{ azvpnpeeraddress }} 255.255.255.255 {{ vpnrouteip }} 1"
+      cisco.asa.asa_config:
+        lines:
+        - "route AZURE {{ azvpnpeeraddress }} 255.255.255.255 {{ vpnrouteip }} 1"
+        match: line
+        provider: "{{ cli }}"
+
+    - name: router bgp 65000
+      cisco.asa.asa_config:
+        lines:
+        - bgp log-neighbor-changes
+        - bgp graceful-restart
+        match: line
+        parents: [router bgp 65000]
+        provider: "{{ cli }}"
+
+    - name: router bgp 65000, address-family ipv4 unicast
+      cisco.asa.asa_config:
+        lines:
+        - "neighbor {{ azvpnpeeraddress }} remote-as 65515"
+        - "neighbor {{ azvpnpeeraddress }} ebgp-multihop 255"
+        - "neighbor {{ azvpnpeeraddress }} activate"
+        - "network {{ localnetgwaddrnet }}"
+        - "network {{ localnetgwpeeraddrnet }}"
+        - no auto-summary
+        - no synchronization
+        - exit-address-family
+        match: line
+        parents: 
+          - router bgp 65000
+          - address-family ipv4 unicast
+        provider: "{{ cli }}"  

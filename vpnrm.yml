@@ -1,0 +1,67 @@
+- hosts: asahosts
+  connection: local
+  gather_facts: no
+
+  vars:
+      rg: bccDevFileShareRG
+      vnetgw: VNetGW1
+      keyvaulturl: "https://bccdevkeyvault1.vault.azure.net/"
+
+  tasks:
+
+    - name: Get latest version of project secret variables
+      azure.azcollection.azure_rm_keyvaultsecret_info:
+        vault_uri: "{{ keyvaulturl }}"
+        name: "{{ item }}"
+      loop:
+        - "ASAUserName"
+        - "ASAUserPassword"
+        - "EnablePassword"
+      register: secrets
+
+    - name: set asa cli and vpn shared key variables
+      set_fact: 
+        cli:
+          host: "{{ inventory_hostname }}"
+          authorize: yes
+          username: "{{ secrets.results[0]['secrets'][0]['secret'] }}"
+          password: "{{ secrets.results[1]['secrets'][0]['secret'] }}"
+          auth_pass: "{{ secrets.results[2]['secrets'][0]['secret'] }}"
+
+    - name: Get virtual network gateway info
+      azure_rm_resource_info:
+        resource_group: "{{ rg }}"
+        provider: network
+        resource_type: virtualNetworkGateways
+        resource_name: "{{ vnetgw }}"
+        api_version: "2020-11-01"
+      register: vnetgwvar
+
+    - name: Set bgpPeeringAddress and tunnelIpAddresses public ip variables
+      set_fact: 
+        azvpnpeeraddress: "{{ vnetgwvar['response'][0]['properties']['bgpSettings']['bgpPeeringAddress'] }}" 
+        azvpnpubip: "{{ vnetgwvar['response'][0]['properties']['bgpSettings']['bgpPeeringAddresses'][0]['tunnelIpAddresses'][0] }}" 
+
+    - name: undo ASA configuration changes
+      cisco.asa.asa_config:
+        lines:
+        - "{{ item }}"
+        provider: "{{ cli }}"
+      loop:
+        - no router bgp 65000
+        - "no route AZURE {{ azvpnpeeraddress }} 255.255.255.255 192.168.1.3 1"
+        - no interface Tunnel1
+        - "clear configure tunnel-group {{ azvpnpubip }}"
+        - no group-policy AZURE attributes
+        - no group-policy AZURE internal
+        - no crypto ipsec profile AZURE-PROPOSAL
+        - no crypto ipsec ikev2 ipsec-proposal AZURE-PROPOSAL
+        - no crypto ikev2 enable outside
+        - no crypto ikev2 policy 20
+        - no crypto ikev2 policy 10
+
+    #- name: Delete resource group with all vpn resources
+    #  azure_rm_resourcegroup:
+    #    name: "{{ rg }}"
+    #    force_delete_nonempty: yes
+    #    state: absent

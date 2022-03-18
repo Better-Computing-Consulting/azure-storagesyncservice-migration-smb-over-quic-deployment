@@ -1,0 +1,9 @@
+#!/bin/bash
+
+az network vpn-connection delete -g bccDevFileShareRG -n AzureLabConn
+
+az network local-gateway delete -g bccDevFileShareRG -n ASALAB
+
+az network vnet-gateway delete -g bccDevFileShareRG -n VNetGW1
+
+az network public-ip delete -g bccDevFileShareRG -n VNetGW1PubIP
