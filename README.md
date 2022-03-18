@@ -17,6 +17,8 @@ Lastly, on the new VM deployed by the Ansible Playbook run the ReplicaSMBServer.
 
 For the playbook and the scripts make sure to update the variables to fit your environment.
 
+The repository includes a playbook __vpnrm.yml__ to undo all the changes made to the ASA Firewall
+
 These are the steps taken by the playbook and the scripts.  The playbook and scripts must be run in this order:
 
 __azresources.yml__
