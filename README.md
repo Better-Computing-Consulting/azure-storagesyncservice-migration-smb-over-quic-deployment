@@ -75,3 +75,8 @@ __After the ReplicaSMBServer.ps1 script completes to enable SMB over QUIC do thi
 4.  Go to "File shares (SMB server)"
 5.  Under File sharing across the internet with SMB over QUIC, click Configure.
 6.  Select the hostname on the SSL certificate and click Enable.
+
+
+Enjoy
+
+:smiley:
