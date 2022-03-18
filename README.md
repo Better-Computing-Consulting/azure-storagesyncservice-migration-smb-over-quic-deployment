@@ -3,7 +3,13 @@ Ansible playbook to deploy the resources for a Windows Server 2022 Datacenter Az
 
 To replicate clone your copy of the repository onto a linux server with Ansible and the azure.azcollection and cisco.asa collections, then execute the azresources.yml playblook.
 
-This plabook is based on the one for the https://bcc.bz/post/azure-devops-ci-ansible-vpn-deployment-between-virtual-network-gateway-and-cisco-asa repository, please thake a look at this repository for more details.
+This plabook is based on the one for the https://bcc.bz/post/azure-devops-ci-ansible-vpn-deployment-between-virtual-network-gateway-and-cisco-asa repository, please thake a look at this repository for more details. 
+
+As in the VPN Deployment repocitory, the Ansible playbook in this one uses an Azure Key vault to retrieve the secrets used during execution.  However, in addition to the secrets required for the setup of the point-to-connection between Azure and the on-prem network, ie, ASA login information and shared key, for the project we added a secret that hold the password of admninistrator of the Windows 2022 Virtual machine.  Thus, while you can use the template and the steps of the VPN Deployment repocitory to deploy the KeyVault for this project, you need to add the admin password secret to the vault before executing the Ansible playbook.  You can add the secret to you existing Key Vault with this command:
+
+`az keyvault secret set --name vmadminpw --vault-name your-vault-name --value your-private-pw`
+
+Please note the playbook is currently configured to look for a secret of name __vmadminpw__
 
 After the playbook finishes, on the server containing the share you wish to migrate to azure, run the SourceSMBServer.ps1 script.
 
