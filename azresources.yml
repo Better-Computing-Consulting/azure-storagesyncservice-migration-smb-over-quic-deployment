@@ -61,7 +61,7 @@
         name: "{{ vnet }}"
         address_prefixes: "{{ vnetiprange }}"
 
-    - name: Add subnet
+    - name: Add subnet with Microsoft.Storage service endpoint
       azure_rm_subnet:
         resource_group: "{{ rg }}"
         name: "{{ subnet1name }}"
@@ -105,7 +105,7 @@
             - value: "{{ asapubip }}"
               action: Allow
 
-    - name: "Create public IP address"
+    - name: "Create public IP address for file server VM"
       azure_rm_publicipaddress:
         resource_group: "{{ rg }}"
         allocation_method: Static
@@ -121,7 +121,7 @@
         records:
           - entry: "{{ vmpubip['state']['ip_address'] }}"
 
-    - name: "Create Network Security Group that allows port UDP 443"
+    - name: "Create Network Security Group that allows SMB over QUIC port UDP 443"
       azure_rm_securitygroup:
         resource_group: "{{ rg }}"
         name: "{{ vmname }}NSG"
@@ -149,11 +149,11 @@
             primary: True
       register: vmpnic
 
-    - name: "Display NIC info"
+    - name: "Display file server private IP"
       ansible.builtin.debug:
         msg: "{{ vmpnic['state']['ip_configuration']['private_ip_address'] }}"
 
-    - name: "Create VM"
+    - name: "Create file server VM"
       azure_rm_virtualmachine:
         resource_group: "{{ rg }}"
         name: "{{ vmname }}"
