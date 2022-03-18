@@ -11,7 +11,7 @@ Lastly, on the new VM deployed by the Ansible Playbook run the ReplicaSMBServer.
 
 For the playbook and the scripts make sure to update the variables to fit your environment.
 
-These are the steps taken by the playbook and the scripts:
+These are the steps taken by the playbook and the scripts.  The playbook and scripts must be run in this order:
 
 __azresources.yml__
 
@@ -58,5 +58,14 @@ __ReplicaSMBServer.ps1 (run on new Windows 2022 VM)__
 9. Login to Azure
 10. Register the local host in the StorageSyncService
 11. Create a StorageSyncServerEndpoint for the local host in the StorageSyncGroup
-12. Download a SSL Certificate as pfx file from a SSH server (SMB over QUIC requires a 
-13. 
+12. Download a SSL Certificate as pfx file from a SSH server (SMB over QUIC requires a SSL certificates signed by a trusted third party certificate issue, like Let's Encrypt)
+13. Install the pfx certificate on the local host.
+
+__After the ReplicaSMBServer.ps1 script completes to enable SMB over QUIC do this:__
+
+1.  Open Windows Admin Center on the source file server
+2.  Add the Windows 2022 server to Windows Admin Center
+3.  Go to Settings,
+4.  Go to "File shares (SMB server)"
+5.  Under File sharing across the internet with SMB over QUIC, click Configure.
+6.  Select the hostname on the SSL certificate and click Enable.
