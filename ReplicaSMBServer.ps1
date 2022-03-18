@@ -9,6 +9,8 @@ $sharename = "share1"
 $sshuser = "vpndemo"
 $sshserver = "ubuntuagent1"
 $pfx_cert_path = ":~\w202202.bcc.bz.pfx"
+$sharefullaccessgroup = "smbdemo\Share1Admins"
+$sharechangeaccessgroup = "smbdemo\Share1Users"
 
 "Check if domain joined"
 if ( $env:USERDNSDomain -ne $domain ){ 
@@ -24,7 +26,7 @@ if ( $env:USERDNSDomain -ne $domain ){
     new-item -path F: -name $sharename -itemtype "directory"
 
     "Share directory"
-    New-SmbShare -Name "share1" -Path F:\share1 -FolderEnumerationMode AccessBased -FullAccess "smbdemo\Share1Admins" -ChangeAccess "smbdemo\Share1Users"
+    New-SmbShare -Name "share1" -Path F:\share1 -FolderEnumerationMode AccessBased -FullAccess $sharefullaccessgroup -ChangeAccess $sharechangeaccessgroup
 
     "Download StorageSyncAgent.msi"
     Invoke-WebRequest -Uri https://aka.ms/afs/agent/Server2022 -OutFile "StorageSyncAgent.msi" 
