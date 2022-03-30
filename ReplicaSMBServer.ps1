@@ -14,7 +14,7 @@ $sharechangeaccessgroup = "smbdemo\Share1Users"
 
 "Check if domain joined"
 if ( $env:USERDNSDomain -ne $domain ){ 
-    Add-Computer -DomainName smbdemo.dev -Restart 
+    Add-Computer -DomainName $domain -Restart 
 } else {
     "Setup data disk as drive F"
     $disk = Get-Disk | where-object PartitionStyle -eq "RAW"  
