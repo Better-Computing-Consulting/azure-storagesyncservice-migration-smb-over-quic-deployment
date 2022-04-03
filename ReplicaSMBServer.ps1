@@ -8,7 +8,9 @@ $syncservicename = "bccDevFileShareSync"
 $sharename = "share1"
 $sshuser = "vpndemo"
 $sshserver = "ubuntuagent1"
-$pfx_cert_path = ":~\w202202.bcc.bz.pfx"
+$pfx_cert_file = "w202202.bcc.bz.pfx"
+$unix_path = ":~\"
+$win_path = ".\"
 $sharefullaccessgroup = "smbdemo\Share1Admins"
 $sharechangeaccessgroup = "smbdemo\Share1Users"
 
@@ -26,7 +28,7 @@ if ( $env:USERDNSDomain -ne $domain ){
     new-item -path F: -name $sharename -itemtype "directory"
 
     "Share directory"
-    New-SmbShare -Name "share1" -Path F:\share1 -FolderEnumerationMode AccessBased -FullAccess $sharefullaccessgroup -ChangeAccess $sharechangeaccessgroup
+    New-SmbShare -Name $sharename -Path F:\share1 -FolderEnumerationMode AccessBased -FullAccess $sharefullaccessgroup -ChangeAccess $sharechangeaccessgroup
 
     "Download StorageSyncAgent.msi"
     Invoke-WebRequest -Uri https://aka.ms/afs/agent/Server2022 -OutFile "StorageSyncAgent.msi" 
@@ -62,12 +64,12 @@ if ( $env:USERDNSDomain -ne $domain ){
     $serverendpoint.ProvisioningState
 
     "Get SSL Certificate as pfx file from SSH server"
-    $scpcommand = "scp -oStrictHostKeyChecking=no $sshuser@$sshserver$pfx_cert_path ." 
+    $scpcommand = "scp -oStrictHostKeyChecking=no $sshuser@$sshserver$unix_path$pfx_cert_file ."  
     Invoke-Expression $scpcommand
 
     "Get certificate password"
     $mypwd = Get-Credential -UserName 'Enter Cert password' -Message 'Enter Cert password'
 
     "Install certificate"
-    Import-PfxCertificate -FilePath .\w202202.bcc.bz.pfx -CertStoreLocation Cert:\LocalMachine\My -Password $mypwd.Password
+    Import-PfxCertificate -FilePath $win_path$pfx_cert_file -CertStoreLocation Cert:\LocalMachine\My -Password $mypwd.Password
 }
