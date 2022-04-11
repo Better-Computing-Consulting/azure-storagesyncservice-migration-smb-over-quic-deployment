@@ -32,11 +32,11 @@ $registeredServer = Register-AzStorageSyncServer -ParentObject $storageSync
 "Create StorageSyncGroup"
 $syncGroup = New-AzStorageSyncGroup -ParentObject $storageSync -Name $syncGroupName
 
-"Get Storage Account Created in Ansible Playbook"
-$storageAccount = Get-AzStorageAccount -ResourceGroupName $rg -Name $storageAccountName
-
 "Add File Share to the Storage Account"
 $fileShare = New-AzRmStorageShare -ResourceGroupName $rg -StorageAccountName $storageAccountName -Name $shareName -AccessTier Hot
+
+"Get Storage Account Created in Ansible Playbook"
+$storageAccount = Get-AzStorageAccount -ResourceGroupName $rg -Name $storageAccountName
 
 "Create StorageSyncCloudEndpoint"
 $cloudendpoint = New-AzStorageSyncCloudEndpoint `
