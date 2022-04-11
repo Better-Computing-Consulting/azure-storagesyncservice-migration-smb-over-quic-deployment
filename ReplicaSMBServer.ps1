@@ -64,7 +64,7 @@ if ( $env:USERDNSDomain -ne $domain ){
     $serverendpoint.ProvisioningState
 
     "Get SSL Certificate as pfx file from SSH server"
-    $scpcommand = "scp -oStrictHostKeyChecking=no $sshuser@$sshserver$unix_path$pfx_cert_file ."  
+    $scpcommand = "scp -oStrictHostKeyChecking=no $sshuser@$sshserver$unix_path$pfx_cert_file $win_path"  
     Invoke-Expression $scpcommand
 
     "Get certificate password"
