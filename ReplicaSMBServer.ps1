@@ -59,7 +59,7 @@ if ( $env:USERDNSDomain -ne $domain ){
             -Name $registeredServer.FriendlyName `
             -SyncGroup $syncGroup `
             -ServerResourceId $registeredServer.ResourceId `
-            -ServerLocalPath "F:\share1" `
+            -ServerLocalPath "F:\$sharename" `
             -CloudTiering -VolumeFreeSpacePercent 20 
     $serverendpoint.ProvisioningState
 
