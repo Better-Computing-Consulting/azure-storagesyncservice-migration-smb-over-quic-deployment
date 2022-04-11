@@ -28,7 +28,7 @@ if ( $env:USERDNSDomain -ne $domain ){
     new-item -path F: -name $sharename -itemtype "directory"
 
     "Share directory"
-    New-SmbShare -Name $sharename -Path F:\share1 -FolderEnumerationMode AccessBased -FullAccess $sharefullaccessgroup -ChangeAccess $sharechangeaccessgroup
+    New-SmbShare -Name $sharename -Path F:\$sharename -FolderEnumerationMode AccessBased -FullAccess $sharefullaccessgroup -ChangeAccess $sharechangeaccessgroup
 
     "Download StorageSyncAgent.msi"
     Invoke-WebRequest -Uri https://aka.ms/afs/agent/Server2022 -OutFile "StorageSyncAgent.msi" 
