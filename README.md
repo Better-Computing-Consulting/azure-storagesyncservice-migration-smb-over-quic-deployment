@@ -78,6 +78,13 @@ __After the ReplicaSMBServer.ps1 script completes to enable SMB over QUIC do thi
 5.  Under File sharing across the internet with SMB over QUIC, click Configure.
 6.  Select the hostname on the SSL certificate and click Enable.
 
+This blog goes explains in detail some aspects of the playbook and the scripts.
+
+https://bcc.bz/post/automatic-azure-storagesyncservice-migration-and-smb-over-quic-deployment
+
+I also posted a video that demonstrates the entire process execution and test access of the Azure file server via SMB-over-QUIC by users with different permissions.
+
+https://youtu.be/oBceKtZEBdA
 
 Enjoy
 
